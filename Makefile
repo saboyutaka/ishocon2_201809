@@ -14,7 +14,7 @@ bench: ## Run Serve
 	docker-compose exec bench /bin/bash
 
 bundle: ## Run Bundle install
-	docker-compose exec --rm app bundle install
+	docker-compose exec app bundle install
 
 alp: ## Run alp
 	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='2[00-99]'
@@ -25,8 +25,6 @@ alp: ## Run alp
 mitmweb: ## Run mitmweb
 	mitmweb --mode reverse:http://localhost:8888/ -p 80
 	mitmdump -n -C flows.dms
-
-
 
 replay: ## Run mitmdump
 
