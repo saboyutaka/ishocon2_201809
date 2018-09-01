@@ -60,7 +60,15 @@ class Ishocon2::WebApp < Sinatra::Base
 
     def view_initialize
       dir = File.expand_path('../public', __FILE__)
-      Dir.glob("#{dir}/**/*.html").each {|file| FileUtils.rm(file) }
+      Dir.glob("#{dir}/**/*.html").each { |file| FileUtils.rm(file) }
+
+      $rendered_vote = File.read('data/rendered_vote.html')
+      $rendered_vote_ok = render_vote('投票に成功しました')
+      $rendered_vote_invalid_user = render_vote('個人情報に誤りがあります')
+      $rendered_vote_empty_candidate = render_vote('候補者を記入してください')
+      $rendered_vote_invalid_candidate = render_vote('候補者を正しく記入してください')
+      $rendered_vote_no_keyword = render_vote('投票理由を記入してください')
+      $rendered_vote_over_voting = render_vote('投票数が上限を超えています')
     end
 
     def store_candidates
@@ -201,13 +209,13 @@ class Ishocon2::WebApp < Sinatra::Base
       params[:address],
       params[:mynumber]).first
 
-    return render_vote('個人情報に誤りがあります') if user.nil?
-    return render_vote('候補者を記入してください') if params[:candidate].nil? || params[:candidate] == ''
+    return $rendered_vote_invalid_user if user.nil? || user[:name] != params[:name] || user[:address] != params[:address]
+    return $rendered_vote_empty_candidate if params[:candidate].nil? || params[:candidate] == ''
 
     candidate = stored_candidates.find { |h| h[:name] == params[:candidate] }
 
-    return render_vote('候補者を正しく記入してください') if candidate.nil?
-    return render_vote('投票理由を記入してください') if params[:keyword].nil? || params[:keyword] == ''
+    return $rendered_vote_invalid_candidate if candidate.nil?
+    return $rendered_vote_no_keyword if params[:keyword].nil? || params[:keyword] == ''
 
     key = "user:#{user[:id]}:vote"
 
@@ -216,7 +224,7 @@ class Ishocon2::WebApp < Sinatra::Base
     voted_count = redis.get(key).to_i
     voting_count = params[:vote_count].to_i
 
-    return render_vote('投票数が上限を超えています') if voted_count < voting_count
+    return $rendered_vote_over_voting if voted_count < voting_count
 
     voice = db.xquery('SELECT * FROM voices WHERE candidate_id = ? AND keyword = ?', candidate[:id], params[:keyword]).first
     if voice
@@ -237,7 +245,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
     redis.incr('votes')
 
-    return render_vote('投票に成功しました')
+    return $rendered_vote_ok
   end
 
   def user_vote(key)
@@ -260,116 +268,4 @@ class Ishocon2::WebApp < Sinatra::Base
   def render_vote(message = '')
     RENDERED_VOTE_VIEW.sub("{{MESSAGE}}", message)
   end
-
-  RENDERED_VOTE_VIEW = <<~VIEW
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta http-equiv="Content-Type" content="text/html" charset="utf-8">
-          <link rel="stylesheet" href="/css/bootstrap.min.css">
-          <title>ISUCON選挙結果</title>
-        </head>
-
-        <body>
-          <nav class="navbar navbar-inverse navbar-fixed-top">
-            <div class="container">
-              <div class="navbar-header">
-                <a class="navbar-brand" href="/">ISUCON選挙結果</a>
-              </div>
-              <div class="header clearfix">
-                <nav>
-                  <ul class="nav nav-pills pull-right">
-                    <li role="presentation"><a href="/vote">投票する</a></li>
-                  </ul>
-                </nav>
-              </div>
-            </div>
-          </nav>
-
-          <div class="jumbotron">
-        <div class="container">
-          <h1>清き一票をお願いします！！！</h1>
-        </div>
-      </div>
-      <div class="container">
-        <div class="row">
-          <div class="col-md-6 col-md-offset-3">
-            <div class="login-panel panel panel-default">
-              <div class="panel-heading">
-                <h3 class="panel-title">投票フォーム</h3>
-              </div>
-              <div class="panel-body">
-                <form method="POST" action="/vote">
-                  <fieldset>
-                    <label>氏名</label>
-                    <div class="form-group">
-                      <input class="form-control" name="name" autofocus>
-                    </div>
-                    <label>住所</label>
-                    <div class="form-group">
-                      <input class="form-control" name="address" value="">
-                    </div>
-                    <label>私の番号</label>
-                    <div class="form-group">
-                      <input class="form-control" name="mynumber" value="">
-                    </div>
-                    <label>候補者</label>
-                    <div class="form-group">
-                      <select name="candidate">
-                          <option value="高橋 次郎">高橋 次郎</option>
-                          <option value="田中 一郎">田中 一郎</option>
-                          <option value="佐藤 次郎">佐藤 次郎</option>
-                          <option value="高橋 一郎">高橋 一郎</option>
-                          <option value="渡辺 一郎">渡辺 一郎</option>
-                          <option value="鈴木 三郎">鈴木 三郎</option>
-                          <option value="渡辺 三郎">渡辺 三郎</option>
-                          <option value="渡辺 五郎">渡辺 五郎</option>
-                          <option value="佐藤 三郎">佐藤 三郎</option>
-                          <option value="佐藤 五郎">佐藤 五郎</option>
-                          <option value="鈴木 次郎">鈴木 次郎</option>
-                          <option value="渡辺 四郎">渡辺 四郎</option>
-                          <option value="鈴木 一郎">鈴木 一郎</option>
-                          <option value="佐藤 一郎">佐藤 一郎</option>
-                          <option value="高橋 四郎">高橋 四郎</option>
-                          <option value="田中 次郎">田中 次郎</option>
-                          <option value="田中 五郎">田中 五郎</option>
-                          <option value="田中 三郎">田中 三郎</option>
-                          <option value="伊藤 三郎">伊藤 三郎</option>
-                          <option value="伊藤 一郎">伊藤 一郎</option>
-                          <option value="伊藤 五郎">伊藤 五郎</option>
-                          <option value="鈴木 四郎">鈴木 四郎</option>
-                          <option value="渡辺 次郎">渡辺 次郎</option>
-                          <option value="伊藤 次郎">伊藤 次郎</option>
-                          <option value="鈴木 五郎">鈴木 五郎</option>
-                          <option value="田中 四郎">田中 四郎</option>
-                          <option value="伊藤 四郎">伊藤 四郎</option>
-                          <option value="高橋 三郎">高橋 三郎</option>
-                          <option value="佐藤 四郎">佐藤 四郎</option>
-                          <option value="高橋 五郎">高橋 五郎</option>
-                      </select>
-                    </div>
-                    <label>投票理由</label>
-                    <div class="form-group">
-                      <input class="form-control" name="keyword" value="">
-                    </div>
-                    <label>投票数</label>
-                    <div class="form-group">
-                      <input class="form-control" name="vote_count" value="">
-                    </div>
-
-                    <div class="text-danger">{{MESSAGE}}</div>
-                    <input class="btn btn-lg btn-success btn-block" type="submit" name="vote" value="投票" />
-                  </fieldset>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-        </body>
-      </html>
-
-  VIEW
 end
