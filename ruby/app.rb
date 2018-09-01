@@ -114,7 +114,7 @@ class Ishocon2::WebApp < Sinatra::Base
     candidates_result = stored_candidates.map do |candidate|
       [candidate[:id], get_candidate_vote(candidate)]
     end
-    sorted = candidates_result.sort {|a, b | a[1] <=> b[1] }.reverse
+    sorted = candidates_result.sort { |a, b| a[1] <=> b[1] }.reverse
     sorted.slice(0...10).each do |res|
       candidate = stored_candidate(res[0])
       candidate[:count] = res[1]
@@ -154,7 +154,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
   get '/political_parties/:name' do
     votes = get_party_vote(params[:name])
-    candidates = stored_candidates.select {|c| c[:political_party] == params[:name] }
+    candidates = stored_candidates.select { |c| c[:political_party] == params[:name] }
     candidate_ids = candidates.map { |c| c[:id] }
     keywords = voice_of_supporter(candidate_ids)
     erb :political_party, locals: { political_party: params[:name],
@@ -181,29 +181,14 @@ class Ishocon2::WebApp < Sinatra::Base
     return render_vote('候補者を正しく記入してください') if candidate.nil?
     return render_vote('投票理由を記入してください') if params[:keyword].nil? || params[:keyword] == ''
 
-    key = "user:#{user[:mynumber]}:vote"
-    # voted_count = user_vote(key)
-    user_vote = redis.get key
-    if user_vote.nil?
-      redis.set key, user[:votes]
-    end
+    key = "user:#{user[:id]}:vote"
 
-    voted_count = db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
+    redis.setnx(key, user[:votes])
+
+    voted_count = redis.get(key).to_i
     voting_count = params[:vote_count].to_i
 
-
-    # voted_count < params[:vote_count].to_i
-    if user[:votes] < (voting_count + voted_count)
-      # 一人あたり投票出来る件数がある user.vote
-      return render_vote('投票数が上限を超えています')
-    end
-
-    voting_count.times do
-      db.xquery('INSERT INTO votes (user_id, candidate_id, keyword) VALUES (?, ?, ?)',
-        user[:id],
-        candidate[:id],
-        params[:keyword])
-    end
+    return render_vote('投票数が上限を超えています') if voted_count < voting_count
 
     voice = db.xquery('SELECT * FROM voices WHERE candidate_id = ? AND keyword = ?', candidate[:id], params[:keyword]).first
     if voice
