@@ -20,6 +20,9 @@ class Ishocon2::WebApp < Sinatra::Base
     require 'sinatra/reloader'
     register Sinatra::Reloader
 
+    require 'rack-mini-profiler'
+    use Rack::MiniProfiler
+
     require 'rack-lineprof'
     use Rack::Lineprof, profile: 'app.rb'
   end
