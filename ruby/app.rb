@@ -62,7 +62,7 @@ SQL
     end
 
     def redis_initialize
-      redis.flashall
+      redis.flushall
       store_candidates
     end
 
