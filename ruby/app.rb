@@ -58,6 +58,11 @@ class Ishocon2::WebApp < Sinatra::Base
       set_sex_votes
     end
 
+    def view_initialize
+      dir = File.expand_path('../public', __FILE__)
+      Dir.glob("#{dir}/**/*.html").each {|file| FileUtils.rm(file) }
+    end
+
     def store_candidates
       candidates = db.xquery('select * from candidates').to_a
 
@@ -111,9 +116,6 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/' do
-    rendered_index = redis.get(VIEW_INDEX_KEY)
-    return rendered_index if rendered_index
-
     # 候補者別の投票数
     candidates = []
     candidates_result = stored_candidates.map do |candidate|
@@ -147,19 +149,13 @@ class Ishocon2::WebApp < Sinatra::Base
 
 
     if 200 < redis.get('votes').to_i
-      redis.set(VIEW_INDEX_KEY, rendered_view)
-      redis.expired(VIEW_INDEX_KEY, 30)
+      File.write('public/index.html', rendered_view)
     end
 
     rendered_view
   end
 
   get '/candidates/:id' do
-    view_key = "view:candidate:#{params[:id]}"
-
-    rendered_index = redis.get(view_key)
-    return rendered_index if rendered_index
-
     candidate = stored_candidate(params[:id])
     return redirect '/' if candidate.nil?
 
@@ -171,19 +167,13 @@ class Ishocon2::WebApp < Sinatra::Base
       keywords: keywords }
 
     if 200 < redis.get('votes').to_i
-      redis.set(view_key, rendered_view)
-      redis.expired(view_key, 30)
+      File.write("public/candidates/#{params[:id]}.html", rendered_view)
     end
 
     rendered_view
   end
 
   get '/political_parties/:name' do
-    view_key = "view:political_parties:#{params[:name]}"
-
-    rendered_index = redis.get(view_key)
-    return rendered_index if rendered_index
-
     votes = get_party_vote(params[:name])
     candidates = stored_candidates.select { |c| c[:political_party] == params[:name] }
     candidate_ids = candidates.map { |c| c[:id] }
@@ -195,8 +185,7 @@ class Ishocon2::WebApp < Sinatra::Base
       keywords: keywords }
 
     if 200 < redis.get('votes').to_i
-      redis.set(view_key, rendered_view)
-      redis.expired(view_key, 30)
+      File.write("public/political_parties/#{params[:name]}.html", rendered_view)
     end
 
     rendered_view
@@ -264,6 +253,8 @@ class Ishocon2::WebApp < Sinatra::Base
   get '/initialize' do
     db_initialize
     redis_initialize
+    view_initialize
+    'ok'
   end
 
   def render_vote(message = '')
