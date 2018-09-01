@@ -5,6 +5,7 @@ services:
     command: /docker/start_app.sh
     volumes:
       - storage_app:/var/lib/mysql
+      - storage_bundle:/var/lib/gems
       - ./:/home/ishocon/webapp
       - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./config/mysql/my.cnf:/etc/mysql/my.cnf
@@ -37,3 +38,4 @@ services:
 volumes:
   storage_bench:
   storage_app:
+  storage_bundle:
