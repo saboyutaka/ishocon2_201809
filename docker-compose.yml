@@ -6,8 +6,10 @@ services:
     volumes:
       - storage_app:/var/lib/mysql
       - ./:/home/ishocon/webapp
+      - ./logs/nginx:/var/log/nginx
     ports:
       - "443:443"
+    working_dir: /home/ishocon/webapp/ruby
 
   storage_app:
     image: busybox
@@ -26,6 +28,10 @@ services:
     image: busybox
     volumes:
       - /var/lib/mysql
+  alp:
+    image: saboyutaka/alp
+    volumes:
+    - ./logs/nginx:/logs
 
 volumes:
   storage_bench:
