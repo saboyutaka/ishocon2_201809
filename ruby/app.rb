@@ -13,6 +13,7 @@ module Ishocon2
 end
 
 $users = {}
+$candidates = []
 
 class Ishocon2::WebApp < Sinatra::Base
   session_secret = ENV['ISHOCON2_SESSION_SECRET'] || 'showwin_happy'
@@ -74,21 +75,15 @@ class Ishocon2::WebApp < Sinatra::Base
     end
 
     def store_candidates
-      candidates = db.xquery('select * from candidates').to_a
-
-      candidates.each do |candidate|
-        redis.set("candidates:#{candidate[:id]}:data", Oj.dump(candidate))
-      end
+      db.xquery('select * from candidates').to_a.each { |c| $candidates << c }
     end
 
     def set_rendered_vote
-      redis.set('rendered_vote', erb(:vote, locals: { candidates: stored_candidates }))
+      redis.set('rendered_vote', erb(:vote, locals: { candidates: $candidates }))
     end
 
     def set_candidate_votes
-      store_candidates.each do |c|
-        redis.set candidate_vote_key(c), 0
-      end
+      $candidates.each { |c| redis.set candidate_vote_key(c), 0 }
     end
 
     def set_sex_votes
@@ -104,15 +99,8 @@ class Ishocon2::WebApp < Sinatra::Base
       %w(夢実現党 国民10人大活躍党 国民元気党 国民平和党)
     end
 
-    def stored_candidates
-      @candidates unless @candidates.nil?
-      candidates_keys = redis.keys 'candidates:*:data'
-      @candidates = redis.mget(candidates_keys).map { |data| Oj.load(data) }
-    end
-
-    def stored_candidate(id)
-      key = "candidates:#{id}:data"
-      Oj.load(redis.get(key))
+    def get_candidate(id)
+      $candidates.find {|c| c[:id] == id }
     end
 
     def get_candidate_vote(candidate)
@@ -128,18 +116,18 @@ class Ishocon2::WebApp < Sinatra::Base
   get '/' do
     # 候補者別の投票数
     candidates = []
-    candidates_result = stored_candidates.map do |candidate|
+    candidates_result = $candidates.map do |candidate|
       [candidate[:id], get_candidate_vote(candidate)]
     end
     sorted = candidates_result.sort { |a, b| a[1] <=> b[1] }.reverse
     sorted.slice(0...10).each do |res|
-      candidate = stored_candidate(res[0])
+      candidate = get_candidate(res[0])
       candidate[:count] = res[1]
       candidates << candidate
     end
     last_candidate_result = sorted.last
     if last_candidate_result
-      candidate = stored_candidate(last_candidate_result[0])
+      candidate = get_candidate(last_candidate_result[0])
       candidate[:count] = last_candidate_result[1]
       candidates << candidate
     end
@@ -166,7 +154,7 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/candidates/:id' do
-    candidate = stored_candidate(params[:id])
+    candidate = get_candidate(params[:id])
     return redirect '/' if candidate.nil?
 
     votes = get_candidate_vote(candidate)
@@ -185,7 +173,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
   get '/political_parties/:name' do
     votes = get_party_vote(params[:name])
-    candidates = stored_candidates.select { |c| c[:political_party] == params[:name] }
+    candidates = $candidates.select { |c| c[:political_party] == params[:name] }
     candidate_ids = candidates.map { |c| c[:id] }
     keywords = voice_of_supporter(candidate_ids)
 
@@ -216,7 +204,7 @@ class Ishocon2::WebApp < Sinatra::Base
     return $rendered_vote_invalid_user if user.nil? || user[:name] != params[:name] || user[:address] != params[:address]
     return $rendered_vote_empty_candidate if params[:candidate].nil? || params[:candidate] == ''
 
-    candidate = stored_candidates.find { |h| h[:name] == params[:candidate] }
+    candidate = $candidates.find { |h| h[:name] == params[:candidate] }
 
     return $rendered_vote_invalid_candidate if candidate.nil?
     return $rendered_vote_no_keyword if params[:keyword].nil? || params[:keyword] == ''
