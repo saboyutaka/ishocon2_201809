@@ -4,8 +4,10 @@ require 'mysql2-cs-bind'
 require 'erubis'
 
 module Ishocon2
-  class AuthenticationError < StandardError; end
-  class PermissionDenied < StandardError; end
+  class AuthenticationError < StandardError;
+  end
+  class PermissionDenied < StandardError;
+  end
 end
 
 class Ishocon2::WebApp < Sinatra::Base
@@ -14,6 +16,14 @@ class Ishocon2::WebApp < Sinatra::Base
   set :erb, escape_html: true
   set :public_folder, File.expand_path('../public', __FILE__)
   set :protection, true
+
+  configure :development do
+    require 'sinatra/reloader'
+    register Sinatra::Reloader
+
+    require 'rack-lineprof'
+    use Rack::Lineprof, profile: 'app.rb'
+  end
 
   helpers do
     def config
@@ -94,8 +104,8 @@ SQL
     end
 
     erb :index, locals: { candidates: candidates,
-                          parties: parties,
-                          sex_ratio: sex_ratio }
+      parties: parties,
+      sex_ratio: sex_ratio }
   end
 
   get '/candidates/:id' do
@@ -104,8 +114,8 @@ SQL
     votes = db.xquery('SELECT COUNT(*) AS count FROM votes WHERE candidate_id = ?', params[:id]).first[:count]
     keywords = voice_of_supporter([params[:id]])
     erb :candidate, locals: { candidate: candidate,
-                              votes: votes,
-                              keywords: keywords }
+      votes: votes,
+      keywords: keywords }
   end
 
   get '/political_parties/:name' do
@@ -117,9 +127,9 @@ SQL
     candidate_ids = candidates.map { |c| c[:id] }
     keywords = voice_of_supporter(candidate_ids)
     erb :political_party, locals: { political_party: params[:name],
-                                    votes: votes,
-                                    candidates: candidates,
-                                    keywords: keywords }
+      votes: votes,
+      candidates: candidates,
+      keywords: keywords }
   end
 
   get '/vote' do
@@ -151,9 +161,9 @@ SQL
 
     params[:vote_count].to_i.times do
       result = db.xquery('INSERT INTO votes (user_id, candidate_id, keyword) VALUES (?, ?, ?)',
-                user[:id],
-                candidate[:id],
-                params[:keyword])
+        user[:id],
+        candidate[:id],
+        params[:keyword])
     end
     return erb :vote, locals: { candidates: candidates, message: '投票に成功しました' }
   end
