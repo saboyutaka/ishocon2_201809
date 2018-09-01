@@ -150,7 +150,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
     if 200 < redis.get('votes').to_i
       redis.set(VIEW_INDEX_KEY, rendered_view)
-      redis.expired(VIEW_INDEX_KEY, 10)
+      redis.expired(VIEW_INDEX_KEY, 30)
     end
 
     rendered_view
@@ -172,7 +172,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
     if 200 < redis.get('votes').to_i
       redis.set(VIEW_CANDIDATE_KEY , rendered_view)
-      redis.expired(VIEW_CANDIDATE_KEY , 10)
+      redis.expired(VIEW_CANDIDATE_KEY , 30)
     end
 
     rendered_view
@@ -194,7 +194,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
     if 200 < redis.get('votes').to_i
       redis.set(VIEW_POLITICAL_PARTY_KEY, rendered_view)
-      redis.expired(VIEW_POLITICAL_PARTY_KEY, 10)
+      redis.expired(VIEW_POLITICAL_PARTY_KEY, 30)
     end
 
     rendered_view
