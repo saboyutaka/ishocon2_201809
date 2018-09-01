@@ -13,6 +13,9 @@ image: ## Run Serve
 bench: ## Run Serve
 	docker-compose exec bench /bin/bash
 
+prod: ## Run as production
+	cd ruby; bundle exec unicorn -c unicorn_config.rb -E production
+
 bundle: ## Run Bundle install
 	docker-compose exec app bundle install
 
