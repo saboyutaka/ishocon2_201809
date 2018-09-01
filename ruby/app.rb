@@ -19,6 +19,10 @@ class Ishocon2::WebApp < Sinatra::Base
   set :public_folder, File.expand_path('../public', __FILE__)
   set :protection, true
 
+  VIEW_INDEX_KEY = 'view:index'.freeze
+  VIEW_CANDIDATE_KEY = 'view:candidate'.freeze
+  VIEW_POLITICAL_PARTY_KEY = 'view:political_party'.freeze
+
   configure :development do
     require 'sinatra/reloader'
     register Sinatra::Reloader
@@ -109,6 +113,9 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/' do
+    rendered_index = redis.get(VIEW_INDEX_KEY)
+    return rendered_index if rendered_index
+
     # 候補者別の投票数
     candidates = []
     candidates_result = stored_candidates.map do |candidate|
@@ -136,31 +143,61 @@ class Ishocon2::WebApp < Sinatra::Base
     woman_votes = redis.get('woman:vote').to_i
     sex_ratio = { '男': man_votes, '女': woman_votes }
 
-    erb :index, locals: { candidates: candidates,
+    rendered_view = erb :index, locals: { candidates: candidates,
       parties: parties,
       sex_ratio: sex_ratio }
+
+
+    if 200 < redis.get('votes').to_i
+      redis.set(VIEW_INDEX_KEY, rendered_view)
+      redis.expired(VIEW_INDEX_KEY, 10)
+    end
+
+    rendered_view
   end
 
   get '/candidates/:id' do
+    rendered_index = redis.get(VIEW_CANDIDATE_KEY )
+    return rendered_index if rendered_index
+
     candidate = stored_candidate(params[:id])
     return redirect '/' if candidate.nil?
 
     votes = get_candidate_vote(candidate)
     keywords = voice_of_supporter([params[:id]])
-    erb :candidate, locals: { candidate: candidate,
+
+    rendered_view = erb :candidate, locals: { candidate: candidate,
       votes: votes,
       keywords: keywords }
+
+    if 200 < redis.get('votes').to_i
+      redis.set(VIEW_CANDIDATE_KEY , rendered_view)
+      redis.expired(VIEW_CANDIDATE_KEY , 10)
+    end
+
+    rendered_view
   end
 
   get '/political_parties/:name' do
+    rendered_index = redis.get(VIEW_POLITICAL_PARTY_KEY)
+    return rendered_index if rendered_index
+
     votes = get_party_vote(params[:name])
     candidates = stored_candidates.select { |c| c[:political_party] == params[:name] }
     candidate_ids = candidates.map { |c| c[:id] }
     keywords = voice_of_supporter(candidate_ids)
-    erb :political_party, locals: { political_party: params[:name],
+
+    rendered_view = erb :political_party, locals: { political_party: params[:name],
       votes: votes,
       candidates: candidates,
       keywords: keywords }
+
+    if 200 < redis.get('votes').to_i
+      redis.set(VIEW_POLITICAL_PARTY_KEY, rendered_view)
+      redis.expired(VIEW_POLITICAL_PARTY_KEY, 10)
+    end
+
+    rendered_view
   end
 
   get '/vote' do
@@ -206,6 +243,8 @@ class Ishocon2::WebApp < Sinatra::Base
     end
 
     redis.decrby key, voting_count
+
+    redis.incr('votes')
 
     return render_vote('投票に成功しました')
   end
