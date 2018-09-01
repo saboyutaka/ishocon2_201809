@@ -179,7 +179,7 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/political_parties/:name' do
-    view_key = "view:politial_partyies:#{params[:name]}"
+    view_key = "view:political_parties:#{params[:name]}"
 
     rendered_index = redis.get(view_key)
     return rendered_index if rendered_index
