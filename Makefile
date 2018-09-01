@@ -17,7 +17,10 @@ bundle: ## Run Bundle install
 	docker-compose exec --rm app bundle install
 
 alp: ## Run alp
-	 docker-compose run --rm alp -f access.log
+	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='2[00-99]'
+	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='3[00-99]'
+	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='4[00-99]'
+	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='5[00-99]'
 
 mitmweb: ## Run mitmweb
 	mitmweb --mode reverse:http://localhost:8888/ -p 80

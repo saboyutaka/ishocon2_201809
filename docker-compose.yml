@@ -6,9 +6,11 @@ services:
     volumes:
       - storage_app:/var/lib/mysql
       - ./:/home/ishocon/webapp
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/mysql/my.cnf:/etc/mysql/my.cnf
       - ./logs/nginx:/var/log/nginx
     ports:
-      - "443:443"
+      - 443:443
     working_dir: /home/ishocon/webapp/ruby
 
   storage_app:
@@ -31,8 +33,7 @@ services:
   alp:
     image: saboyutaka/alp
     volumes:
-    - ./logs/nginx:/logs
-
+      - ./logs/nginx:/logs
 volumes:
   storage_bench:
   storage_app:
