@@ -20,8 +20,6 @@ class Ishocon2::WebApp < Sinatra::Base
   set :protection, true
 
   VIEW_INDEX_KEY = 'view:index'.freeze
-  VIEW_CANDIDATE_KEY = 'view:candidate'.freeze
-  VIEW_POLITICAL_PARTY_KEY = 'view:political_party'.freeze
 
   configure :development do
     require 'sinatra/reloader'
@@ -181,7 +179,7 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/political_parties/:name' do
-    view_key = "view:politial_partyies:#{params[:id]}"
+    view_key = "view:politial_partyies:#{params[:name]}"
 
     rendered_index = redis.get(view_key)
     return rendered_index if rendered_index
