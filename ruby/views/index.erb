@@ -22,7 +22,7 @@
   </div>
   <h2>政党の部</h2>
   <div id="parties" class="row">
-    <% parties.sort { |a, b| b[1] <=> a[1] }.each_with_index do |parties, i| %>
+    <% parties.each_with_index do |parties, i| %>
       <div class="col-md-3">
         <div class="panel panel-default">
           <div class="panel-heading">
