@@ -64,6 +64,7 @@ SQL
     def redis_initialize
       redis.flushall
       store_candidates
+      set_rendered_vote
     end
 
     def store_candidates
@@ -72,6 +73,12 @@ SQL
       candidates.each do |candidate|
         redis.set("candidates:#{candidate[:id]}:data", Oj.dump(candidate))
       end
+    end
+
+    def set_rendered_vote
+      candidates_keys = redis.keys 'candidates:*:data'
+      candidates = redis.mget(candidates_keys).map {|data| Oj.load(data) }
+      redis.set('rendered_vote', erb(:vote, locals: { candidates: candidates }))
     end
   end
 
@@ -124,36 +131,32 @@ SQL
   end
 
   get '/vote' do
-    candidates = db.query('SELECT * FROM candidates')
-    erb :vote, locals: { candidates: candidates, message: '' }
+    render_vote
   end
 
   post '/vote' do
-    candidates_keys = redis.keys 'candidates:*:data'
-    candidates = redis.mget(candidates_keys).map {|data| Oj.load(data) }
-
     user = db.xquery('SELECT * FROM users WHERE name = ? AND address = ? AND mynumber = ?',
       params[:name],
       params[:address],
       params[:mynumber]).first
 
-    return erb :vote, locals: { candidates: candidates, message: '個人情報に誤りがあります' } if user.nil?
+    return render_vote('個人情報に誤りがあります') if user.nil?
 
     candidate = db.xquery('SELECT * FROM candidates WHERE name = ?', params[:candidate]).first
 
     if params[:candidate].nil? || params[:candidate] == ''
-      return erb :vote, locals: { candidates: candidates, message: '候補者を記入してください' }
+      return render_vote('候補者を記入してください')
     elsif candidate.nil?
-      return erb :vote, locals: { candidates: candidates, message: '候補者を正しく記入してください' }
+      return render_vote('候補者を正しく記入してください' )
     end
-    return erb :vote, locals: { candidates: candidates, message: '投票理由を記入してください' } if params[:keyword].nil? || params[:keyword] == ''
+    return render_vote('投票理由を記入してください' ) if params[:keyword].nil? || params[:keyword] == ''
 
     voted_count =
       user.nil? ? 0 : db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
 
     if user[:votes] < (params[:vote_count].to_i + voted_count)
       # 一人あたり投票出来る件数がある user.vote
-      return erb :vote, locals: { candidates: candidates, message: '投票数が上限を超えています' }
+      return render_vote('投票数が上限を超えています')
     end
 
     params[:vote_count].to_i.times do
@@ -162,7 +165,12 @@ SQL
         candidate[:id],
         params[:keyword])
     end
-    return erb :vote, locals: { candidates: candidates, message: '投票に成功しました' }
+    return render_vote('投票に成功しました')
+  end
+
+  def render_vote(message = '')
+    rendered_vote_erb = redis.get('rendered_vote')
+    rendered_vote_erb.sub("{{MESSAGE}}", message)
   end
 
   get '/initialize' do
