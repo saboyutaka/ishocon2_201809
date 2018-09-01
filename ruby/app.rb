@@ -1,7 +1,6 @@
 require 'sinatra/base'
-require 'mysql2'
-require 'mysql2-cs-bind'
 require 'erubis'
+require_relative './db'
 
 module Ishocon2
   class AuthenticationError < StandardError;
@@ -26,33 +25,6 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   helpers do
-    def config
-      @config ||= {
-        db: {
-          host: ENV['ISHOCON2_DB_HOST'] || 'localhost',
-          port: ENV['ISHOCON2_DB_PORT'] && ENV['ISHOCON2_DB_PORT'].to_i,
-          username: ENV['ISHOCON2_DB_USER'] || 'ishocon',
-          password: ENV['ISHOCON2_DB_PASSWORD'] || 'ishocon',
-          database: ENV['ISHOCON2_DB_NAME'] || 'ishocon2'
-        }
-      }
-    end
-
-    def db
-      return Thread.current[:ishocon2_db] if Thread.current[:ishocon2_db]
-      client = Mysql2::Client.new(
-        host: config[:db][:host],
-        port: config[:db][:port],
-        username: config[:db][:username],
-        password: config[:db][:password],
-        database: config[:db][:database],
-        reconnect: true
-      )
-      client.query_options.merge!(symbolize_keys: true)
-      Thread.current[:ishocon2_db] = client
-      client
-    end
-
     def election_results
       query = <<SQL
 SELECT c.id, c.name, c.political_party, c.sex, v.count
