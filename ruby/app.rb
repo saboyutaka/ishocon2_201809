@@ -138,25 +138,29 @@ SQL
   end
 
   post '/vote' do
+    candidates = db.query('SELECT name FROM candidates')
     user = db.xquery('SELECT * FROM users WHERE name = ? AND address = ? AND mynumber = ?',
-                     params[:name],
-                     params[:address],
-                     params[:mynumber]).first
-    candidate = db.xquery('SELECT * FROM candidates WHERE name = ?', params[:candidate]).first
-    voted_count =
-      user.nil? ? 0 : db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
+      params[:name],
+      params[:address],
+      params[:mynumber]).first
 
-    candidates = db.query('SELECT * FROM candidates')
-    if user.nil?
-      return erb :vote, locals: { candidates: candidates, message: '個人情報に誤りがあります' }
-    elsif user[:votes] < (params[:vote_count].to_i + voted_count)
-      return erb :vote, locals: { candidates: candidates, message: '投票数が上限を超えています' }
-    elsif params[:candidate].nil? || params[:candidate] == ''
+    return erb :vote, locals: { candidates: candidates, message: '個人情報に誤りがあります' } if user.nil?
+
+    candidate = db.xquery('SELECT * FROM candidates WHERE name = ?', params[:candidate]).first
+
+    if params[:candidate].nil? || params[:candidate] == ''
       return erb :vote, locals: { candidates: candidates, message: '候補者を記入してください' }
     elsif candidate.nil?
       return erb :vote, locals: { candidates: candidates, message: '候補者を正しく記入してください' }
-    elsif params[:keyword].nil? || params[:keyword] == ''
-      return erb :vote, locals: { candidates: candidates, message: '投票理由を記入してください' }
+    end
+    return erb :vote, locals: { candidates: candidates, message: '投票理由を記入してください' } if params[:keyword].nil? || params[:keyword] == ''
+
+    voted_count =
+      user.nil? ? 0 : db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
+
+    if user[:votes] < (params[:vote_count].to_i + voted_count)
+      # 一人あたり投票出来る件数がある user.vote
+      return erb :vote, locals: { candidates: candidates, message: '投票数が上限を超えています' }
     end
 
     params[:vote_count].to_i.times do
