@@ -12,6 +12,8 @@ module Ishocon2
   end
 end
 
+$users = {}
+
 class Ishocon2::WebApp < Sinatra::Base
   session_secret = ENV['ISHOCON2_SESSION_SECRET'] || 'showwin_happy'
   use Rack::Session::Cookie, key: 'rack.session', secret: session_secret
@@ -204,10 +206,12 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   post '/vote' do
-    user = db.xquery('SELECT * FROM users WHERE name = ? AND address = ? AND mynumber = ?',
-      params[:name],
-      params[:address],
-      params[:mynumber]).first
+    mynumber = params[:mynumber]
+    user = $users[mynumber]
+    if user.nil?
+      user = db.xquery('SELECT * FROM users WHERE mynumber = ?', mynumber).first
+      $users[:mynumber] = user
+    end
 
     return $rendered_vote_invalid_user if user.nil? || user[:name] != params[:name] || user[:address] != params[:address]
     return $rendered_vote_empty_candidate if params[:candidate].nil? || params[:candidate] == ''
@@ -265,7 +269,22 @@ class Ishocon2::WebApp < Sinatra::Base
     'ok'
   end
 
+  # get '/init' do
+  #   prepare_users
+  # end
+
+  # def prepare_users
+  #   0.step(4000000, 100) do |n|
+  #     puts n
+  #     db.xquery("SELECT * FROM users LIMIT 100 OFFSET #{n}").to_a.each do |user|
+  #       $users[user[:mynumber]] ||= user
+  #       print '.'
+  #     end
+  #     puts ''
+  #   end
+  # end
+
   def render_vote(message = '')
-    RENDERED_VOTE_VIEW.sub("{{MESSAGE}}", message)
+    $rendered_vote.sub("{{MESSAGE}}", message)
   end
 end
