@@ -13,12 +13,18 @@ services:
     ports:
       - 443:443
     working_dir: /home/ishocon/webapp/ruby
-
+    depends_on:
+      - redis
+    environment:
+      ISHOCON2_REDIS_HOST: redis
   storage_app:
     image: busybox
     volumes:
       - /var/lib/mysql
-
+  redis:
+    image: redis:4.0-alpine
+    ports:
+      - 6379:6379
   bench:
     image: showwin/ishocon2_bench:latest
     command: /docker/start_bench.sh

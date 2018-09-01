@@ -1,5 +1,8 @@
 require 'sinatra/base'
 require 'erubis'
+require 'oj'
+
+require_relative './redis'
 require_relative './db'
 
 module Ishocon2
@@ -57,6 +60,19 @@ SQL
     def db_initialize
       db.query('DELETE FROM votes')
     end
+
+    def redis_initialize
+      redis.flashall
+      store_candidates
+    end
+
+    def store_candidates
+      candidates = db.xquery('select * from candidates').to_a
+
+      candidates.each do |candidate|
+        redis.set("candidates:#{candidate[:id]}:data", Oj.dump(candidate))
+      end
+    end
   end
 
   get '/' do
@@ -113,7 +129,9 @@ SQL
   end
 
   post '/vote' do
-    candidates = db.query('SELECT name FROM candidates')
+    candidates_keys = redis.keys 'candidates:*:data'
+    candidates = redis.mget(candidates_keys).map {|data| Oj.load(data) }
+
     user = db.xquery('SELECT * FROM users WHERE name = ? AND address = ? AND mynumber = ?',
       params[:name],
       params[:address],
@@ -149,5 +167,6 @@ SQL
 
   get '/initialize' do
     db_initialize
+    redis_initialize
   end
 end
