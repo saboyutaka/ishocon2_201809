@@ -12,8 +12,20 @@ module Ishocon2
   end
 end
 
+def render_vote(message = '')
+  $rendered_vote.sub("{{MESSAGE}}", message)
+end
+
 $users = {}
-$candidates = []
+$candidates = db.xquery('select * from candidates').to_a
+$vote_count = 0
+$rendered_vote = File.read('data/rendered_vote.html')
+$rendered_vote_ok = render_vote('投票に成功しました')
+$rendered_vote_invalid_user = render_vote('個人情報に誤りがあります')
+$rendered_vote_empty_candidate = render_vote('候補者を記入してください')
+$rendered_vote_invalid_candidate = render_vote('候補者を正しく記入してください')
+$rendered_vote_no_keyword = render_vote('投票理由を記入してください')
+$rendered_vote_over_voting = render_vote('投票数が上限を超えています')
 
 class Ishocon2::WebApp < Sinatra::Base
   session_secret = ENV['ISHOCON2_SESSION_SECRET'] || 'showwin_happy'
@@ -21,8 +33,6 @@ class Ishocon2::WebApp < Sinatra::Base
   set :erb, escape_html: true
   set :public_folder, File.expand_path('../public', __FILE__)
   set :protection, true
-
-  VIEW_INDEX_KEY = 'view:index'.freeze
 
   configure :development do
     require 'sinatra/reloader'
@@ -55,27 +65,18 @@ class Ishocon2::WebApp < Sinatra::Base
 
     def redis_initialize
       redis.flushall
-      store_candidates
       set_rendered_vote
       set_candidate_votes
       set_sex_votes
     end
 
     def view_initialize
-      dir = File.expand_path('../public', __FILE__)
-      Dir.glob("#{dir}/**/*.html").each { |file| FileUtils.rm(file) }
-
-      $rendered_vote = File.read('data/rendered_vote.html')
-      $rendered_vote_ok = render_vote('投票に成功しました')
-      $rendered_vote_invalid_user = render_vote('個人情報に誤りがあります')
-      $rendered_vote_empty_candidate = render_vote('候補者を記入してください')
-      $rendered_vote_invalid_candidate = render_vote('候補者を正しく記入してください')
-      $rendered_vote_no_keyword = render_vote('投票理由を記入してください')
-      $rendered_vote_over_voting = render_vote('投票数が上限を超えています')
+      purge_view_cache
     end
 
-    def store_candidates
-      db.xquery('select * from candidates').to_a.each { |c| $candidates << c }
+    def purge_view_cache
+      dir = File.expand_path('../public', __FILE__)
+      Dir.glob("#{dir}/**/*.html").each { |file| FileUtils.rm(file) }
     end
 
     def set_rendered_vote
@@ -100,7 +101,7 @@ class Ishocon2::WebApp < Sinatra::Base
     end
 
     def get_candidate(id)
-      $candidates.find {|c| c[:id] == id }
+      $candidates.find { |c| c[:id] == id }
     end
 
     def get_candidate_vote(candidate)
@@ -110,6 +111,10 @@ class Ishocon2::WebApp < Sinatra::Base
     def get_party_vote(party_name)
       candidates_keys = redis.keys "party:#{party_name}:*:vote"
       redis.mget(candidates_keys).map(&:to_i).sum
+    end
+
+    def view_cache?
+      ENV['RACK_ENV'] == 'production' && $vote_count > 200
     end
   end
 
@@ -145,28 +150,24 @@ class Ishocon2::WebApp < Sinatra::Base
       parties: parties,
       sex_ratio: sex_ratio }
 
-
-    if 200 < redis.get('votes').to_i
-      File.write('public/index.html', rendered_view)
-    end
+    File.write('public/index.html', rendered_view) if view_cache?
 
     rendered_view
   end
 
   get '/candidates/:id' do
-    candidate = get_candidate(params[:id])
+    id = params[:id].to_i
+    candidate = get_candidate(id)
     return redirect '/' if candidate.nil?
 
     votes = get_candidate_vote(candidate)
-    keywords = voice_of_supporter([params[:id]])
+    keywords = voice_of_supporter([id])
 
     rendered_view = erb :candidate, locals: { candidate: candidate,
       votes: votes,
       keywords: keywords }
 
-    if 200 < redis.get('votes').to_i
-      File.write("public/candidates/#{params[:id]}.html", rendered_view)
-    end
+    File.write("public/candidates/#{id}.html", rendered_view) if view_cache?
 
     rendered_view
   end
@@ -182,9 +183,7 @@ class Ishocon2::WebApp < Sinatra::Base
       candidates: candidates,
       keywords: keywords }
 
-    if 200 < redis.get('votes').to_i
-      File.write("public/political_parties/#{params[:name]}.html", rendered_view)
-    end
+    File.write("public/political_parties/#{params[:name]}.html", rendered_view) if view_cache?
 
     rendered_view
   end
@@ -235,7 +234,7 @@ class Ishocon2::WebApp < Sinatra::Base
 
     redis.decrby key, voting_count
 
-    redis.incr('votes')
+    $vote_count += 1
 
     return $rendered_vote_ok
   end
@@ -257,6 +256,11 @@ class Ishocon2::WebApp < Sinatra::Base
     'ok'
   end
 
+  get '/purge' do
+    purge_view_cache
+    'ok'
+  end
+
   # get '/init' do
   #   prepare_users
   # end
@@ -271,8 +275,4 @@ class Ishocon2::WebApp < Sinatra::Base
   #     puts ''
   #   end
   # end
-
-  def render_vote(message = '')
-    $rendered_vote.sub("{{MESSAGE}}", message)
-  end
 end
