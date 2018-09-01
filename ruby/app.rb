@@ -31,34 +31,21 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   helpers do
-    def election_results
-      query = <<SQL
-SELECT c.id, c.name, c.political_party, c.sex, v.count
-FROM candidates AS c
-LEFT OUTER JOIN
-  (SELECT candidate_id, COUNT(*) AS count
-  FROM votes
-  GROUP BY candidate_id) AS v
-ON c.id = v.candidate_id
-ORDER BY v.count DESC
-SQL
-      db.xquery(query)
-    end
-
     def voice_of_supporter(candidate_ids)
-      query = <<SQL
-SELECT keyword
-FROM votes
-WHERE candidate_id IN (?)
-GROUP BY keyword
-ORDER BY COUNT(*) DESC
-LIMIT 10
-SQL
+      query = <<~SQL
+        SELECT keyword
+        FROM voices
+        WHERE candidate_id IN (?)
+        GROUP BY keyword
+        ORDER BY SUM(count) DESC
+        LIMIT 10
+      SQL
       db.xquery(query, candidate_ids).map { |a| a[:keyword] }
     end
 
     def db_initialize
       db.query('DELETE FROM votes')
+      db.query('DELETE FROM voices')
     end
 
     def redis_initialize
@@ -66,6 +53,7 @@ SQL
       store_candidates
       set_rendered_vote
       set_candidate_votes
+      set_sex_votes
     end
 
     def store_candidates
@@ -77,17 +65,26 @@ SQL
     end
 
     def set_rendered_vote
-      candidates_keys = redis.keys 'candidates:*:data'
-      candidates = redis.mget(candidates_keys).map { |data| Oj.load(data) }
-      redis.set('rendered_vote', erb(:vote, locals: { candidates: candidates }))
+      redis.set('rendered_vote', erb(:vote, locals: { candidates: stored_candidates }))
     end
 
     def set_candidate_votes
-      candidates_keys = redis.keys 'candidates:*:data'
-      candidates = redis.mget(candidates_keys).each { |data| Oj.load(data) }
-      candidates.each do |c|
-        redis.set "party:#{c[:political_party]}:#{c[:id]}:vote", 0
+      store_candidates.each do |c|
+        redis.set candidate_vote_key(c), 0
       end
+    end
+
+    def set_sex_votes
+      redis.set('man:vote', 0)
+      redis.set('woman:vote', 0)
+    end
+
+    def candidate_vote_key(candidate)
+      "party:#{candidate[:political_party]}:#{candidate[:id]}:vote"
+    end
+
+    def stored_parties
+      %w(夢実現党 国民10人大活躍党 国民元気党 国民平和党)
     end
 
     def stored_candidates
@@ -95,26 +92,49 @@ SQL
       candidates_keys = redis.keys 'candidates:*:data'
       @candidates = redis.mget(candidates_keys).map { |data| Oj.load(data) }
     end
+
+    def stored_candidate(id)
+      key = "candidates:#{id}:data"
+      Oj.load(redis.get(key))
+    end
+
+    def get_candidate_vote(candidate)
+      redis.get("party:#{candidate[:political_party]}:#{candidate[:id]}:vote").to_i
+    end
+
+    def get_party_vote(party_name)
+      candidates_keys = redis.keys "party:#{party_name}:*:vote"
+      redis.mget(candidates_keys).map(&:to_i).sum
+    end
   end
 
   get '/' do
+    # 候補者別の投票数
     candidates = []
-    election_results.each_with_index do |r, i|
-      # 上位10人と最下位のみ表示
-      candidates.push(r) if i < 10 || 28 < i
+    candidates_result = stored_candidates.map do |candidate|
+      [candidate[:id], get_candidate_vote(candidate)]
+    end
+    sorted = candidates_result.sort {|a, b | a[1] <=> b[1] }.reverse
+    sorted.slice(0...10).each do |res|
+      candidate = stored_candidate(res[0])
+      candidate[:count] = res[1]
+      candidates << candidate
+    end
+    last_candidate_result = sorted.last
+    if last_candidate_result
+      candidate = stored_candidate(last_candidate_result[0])
+      candidate[:count] = last_candidate_result[1]
+      candidates << candidate
     end
 
-    parties_set = db.query('SELECT political_party FROM candidates GROUP BY political_party')
+    # 政党別の投票数
     parties = {}
-    parties_set.each { |a| parties[a[:political_party]] = 0 }
-    election_results.each do |r|
-      parties[r[:political_party]] += r[:count] || 0
-    end
+    stored_parties.map { |party_name| parties[party_name] = get_party_vote(party_name) }
 
-    sex_ratio = { '男': 0, '女': 0 }
-    election_results.each do |r|
-      sex_ratio[r[:sex].to_sym] += r[:count] || 0
-    end
+    # 性別の投票数
+    man_votes = redis.get('man:vote').to_i
+    woman_votes = redis.get('woman:vote').to_i
+    sex_ratio = { '男': man_votes, '女': woman_votes }
 
     erb :index, locals: { candidates: candidates,
       parties: parties,
@@ -122,9 +142,10 @@ SQL
   end
 
   get '/candidates/:id' do
-    candidate = db.xquery('SELECT * FROM candidates WHERE id = ?', params[:id]).first
+    candidate = stored_candidate(params[:id])
     return redirect '/' if candidate.nil?
-    votes = db.xquery('SELECT COUNT(*) AS count FROM votes WHERE candidate_id = ?', params[:id]).first[:count]
+
+    votes = get_candidate_vote(candidate)
     keywords = voice_of_supporter([params[:id]])
     erb :candidate, locals: { candidate: candidate,
       votes: votes,
@@ -132,11 +153,8 @@ SQL
   end
 
   get '/political_parties/:name' do
-    votes = 0
-    election_results.each do |r|
-      votes += r[:count] || 0 if r[:political_party] == params[:name]
-    end
-    candidates = db.xquery('SELECT * FROM candidates WHERE political_party = ?', params[:name])
+    votes = get_party_vote(params[:name])
+    candidates = stored_candidates.select {|c| c[:political_party] == params[:name] }
     candidate_ids = candidates.map { |c| c[:id] }
     keywords = voice_of_supporter(candidate_ids)
     erb :political_party, locals: { political_party: params[:name],
@@ -163,21 +181,58 @@ SQL
     return render_vote('候補者を正しく記入してください') if candidate.nil?
     return render_vote('投票理由を記入してください') if params[:keyword].nil? || params[:keyword] == ''
 
-    voted_count =
-      user.nil? ? 0 : db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
+    key = "user:#{user[:mynumber]}:vote"
+    # voted_count = user_vote(key)
+    user_vote = redis.get key
+    if user_vote.nil?
+      redis.set key, user[:votes]
+    end
 
-    if user[:votes] < (params[:vote_count].to_i + voted_count)
+    voted_count = db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
+    voting_count = params[:vote_count].to_i
+
+
+    # voted_count < params[:vote_count].to_i
+    if user[:votes] < (voting_count + voted_count)
       # 一人あたり投票出来る件数がある user.vote
       return render_vote('投票数が上限を超えています')
     end
 
-    params[:vote_count].to_i.times do
-      result = db.xquery('INSERT INTO votes (user_id, candidate_id, keyword) VALUES (?, ?, ?)',
+    voting_count.times do
+      db.xquery('INSERT INTO votes (user_id, candidate_id, keyword) VALUES (?, ?, ?)',
         user[:id],
         candidate[:id],
         params[:keyword])
     end
+
+    voice = db.xquery('SELECT * FROM voices WHERE candidate_id = ? AND keyword = ?', candidate[:id], params[:keyword]).first
+    if voice
+      db.xquery('UPDATE voices SET count = ? WHERE id = ?', voice[:count] + voting_count, voice[:id])
+    else
+      db.xquery('INSERT INTO voices (candidate_id, keyword, count) VALUES (?, ?, ?)', candidate[:id], params[:keyword], voting_count)
+    end
+
+    redis.incrby candidate_vote_key(candidate), voting_count
+
+    if candidate[:sex] == '男'
+      redis.incrby 'man:vote', voting_count
+    else
+      redis.incrby 'woman:vote', voting_count
+    end
+
+    redis.decrby key, voting_count
+
     return render_vote('投票に成功しました')
+  end
+
+  def user_vote(key)
+    user_vote = redis.get key
+    if user_vote.nil?
+      redis.set key, user[:votes]
+      user_user[:votes]
+    else
+      user_vote.to_i
+    end
   end
 
   def render_vote(message = '')
