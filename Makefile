@@ -1,5 +1,12 @@
 .DEFAULT_GOAL := help
 
+restart: ## Copy config
+	sudo cp /home/ishocon/webapp/config/nginx/nginx.conf /etc/nginx/nginx.conf
+	sudo nginx -t
+	sudo cp /home/ishocon/webapp/config/mysql/my.cnf /etc/mysql/my.cnf
+	sudo service nginx restart
+	sudo service mysql restart
+
 image: ## Run Serve
 	docker-compose exec app /bin/bash
 
@@ -15,6 +22,8 @@ alp: ## Run alp
 mitmweb: ## Run mitmweb
 	mitmweb --mode reverse:http://localhost:8888/ -p 80
 	mitmdump -n -C flows.dms
+
+
 
 replay: ## Run mitmdump
 
