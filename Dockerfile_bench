@@ -17,15 +17,18 @@ RUN ["/bin/bash", "-c", "debconf-set-selections <<< 'mysql-server mysql-server/r
 RUN ["/bin/bash", "-c", "debconf-set-selections <<< 'mysql-service mysql-server/mysql-apt-config string 4'"]
 RUN apt-get install -y mysql-server
 
-COPY admin/ admin/
-
 # build benchmark
 RUN apt-get install -y git
-RUN cd /admin && go get -t -d -v ./... && go build -o benchmark benchmarker/*.go
-RUN mv /admin/benchmark ~/
+RUN git clone https://github.com/showwin/ISHOCON2.git
+
+RUN cd /ISHOCON2/admin && go get -t -d -v ./... && \
+    go build -o benchmark benchmarker/*.go && \
+    mv /ISHOCON2/admin/benchmark ~/
 
 # MySQL 初期設定
-RUN cp /admin/config/my.cnf /etc/mysql/my.cnf
+RUN cp /ISHOCON2/admin/config/my.cnf /etc/mysql/my.cnf
+
+RUN rm -rf /ISHOCON2
 
 COPY docker/start_bench.sh /docker/start_bench.sh
 
