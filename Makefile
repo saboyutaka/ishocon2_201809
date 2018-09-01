@@ -6,34 +6,27 @@ image: ## Run Serve
 bench: ## Run Serve
 	docker-compose exec bench /bin/bash
 
-update: bundle migrate yarn_install yarn_dev ## Run bundle, migrate and yarn
+bundle: ## Run Bundle install
+	docker-compose exec --rm app bundle install
 
-up: ## Run web container
-	docker-compose up -d web
+alp: ## Run alp
+	 docker-compose run --rm alp -f access.log
 
-console: ## Run Rails console
-	docker-compose run --rm web bundle exec rails c
+mitmweb: ## Run mitmweb
+	mitmweb --mode reverse:http://localhost:8888/ -p 80
+	mitmdump -n -C flows.dms
 
-migrate: ## Run db:migrate
-	docker-compose run --rm web bundle exec rails db:migrate
+replay: ## Run mitmdump
 
-rollback: ## Run db:rollback
-	docker-compose run --rm web bundle exec rails db:rollback
+db-reset: _download_dbdump ## Reset DB
+	docker-compose up -d db
+	docker-compose exec db sh /var/tmp/wait.sh
+	docker-compose exec db mysql -uroot -e 'drop database if exists isubata'
+	docker-compose exec db mysql -uroot -e 'create database isubata'
+	docker-compose exec db sh -c 'mysql -uroot isubata < /var/tmp/db.dump'
 
-bundle: ## Run bundle install
-	docker-compose run --rm web bundle install
-
-attach: ## Attach running web container for binding.pry
-	docker attach `docker ps -f name=churacari_web -f status=running --format "{{.ID}}"`
-
-yarn_install: ## Run yarn install
-	docker-compose run --rm yarn install
-
-yarn_dev: ## Run yarn run dev
-	docker-compose run --rm yarn run dev
-
-yarn_watch: ## Run yarn watch
-	docker-compose run --rm yarn run watch
+_download_dbdump: ## Download db.dump.tgz from Dropbox
+	@if ! [ -f db/db.dump ];then curl -L -O -J 'https://www.dropbox.com/s/pbkxpnd2av9pjd7/db.dump?dl=0' && mv db.dump db; fi
 
 
 .PHONY: help
