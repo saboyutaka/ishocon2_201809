@@ -19,6 +19,9 @@ prod: ## Run as production
 bundle: ## Run Bundle install
 	docker-compose exec app bundle install
 
+myprofiler: ## Run myprofiler
+	myprofiler -user=ishocon -password=ishocon
+
 alp: ## Run alp
 	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='2[00-99]'
 	 docker-compose run --rm alp -f access.log --sum -r --aggregates='/candidates/\d+, /political_parties/\w+' --include-statuses='3[00-99]'
