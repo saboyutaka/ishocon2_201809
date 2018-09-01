@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 
 run: ## Run Serve
-	unicorn -c unicorn_config.rb
+	bundle exec unicorn -c unicorn_config.rb
+
 
 .PHONY: help
 help:
