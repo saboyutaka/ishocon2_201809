@@ -1,0 +1,25 @@
+<div class="jumbotron">
+  <div class="container">
+    <h1><%= politicalParty %></h1>
+  </div>
+</div>
+<div class="container">
+  <div class="row">
+    <div id="info" class="jumbotron">
+      <h2>得票数</h2>
+      <p id="votes" ><%= votes %></p>
+      <h2>候補者</h2>
+      <ul id="members" >
+        <% Object.keys(candidates).forEach((key)=>{ %>
+          <li><%= candidates[key]['name'] %></li>
+        <% }) %>
+      </ul>
+      <h2>支持者の声</h2>
+      <ul id="voices" >
+        <% keywords.forEach((keyword)=>{ %>
+          <li><%= keyword %></li>
+        <% }) %>
+      </ul>
+    </div>
+  </div>
+</div>
