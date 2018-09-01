@@ -65,6 +65,7 @@ SQL
       redis.flushall
       store_candidates
       set_rendered_vote
+      set_candidate_votes
     end
 
     def store_candidates
@@ -77,8 +78,22 @@ SQL
 
     def set_rendered_vote
       candidates_keys = redis.keys 'candidates:*:data'
-      candidates = redis.mget(candidates_keys).map {|data| Oj.load(data) }
+      candidates = redis.mget(candidates_keys).map { |data| Oj.load(data) }
       redis.set('rendered_vote', erb(:vote, locals: { candidates: candidates }))
+    end
+
+    def set_candidate_votes
+      candidates_keys = redis.keys 'candidates:*:data'
+      candidates = redis.mget(candidates_keys).each { |data| Oj.load(data) }
+      candidates.each do |c|
+        redis.set "party:#{c[:political_party]}:#{c[:id]}:vote", 0
+      end
+    end
+
+    def stored_candidates
+      @candidates unless @candidates.nil?
+      candidates_keys = redis.keys 'candidates:*:data'
+      @candidates = redis.mget(candidates_keys).map { |data| Oj.load(data) }
     end
   end
 
@@ -141,15 +156,12 @@ SQL
       params[:mynumber]).first
 
     return render_vote('個人情報に誤りがあります') if user.nil?
+    return render_vote('候補者を記入してください') if params[:candidate].nil? || params[:candidate] == ''
 
-    candidate = db.xquery('SELECT * FROM candidates WHERE name = ?', params[:candidate]).first
+    candidate = stored_candidates.find { |h| h[:name] == params[:candidate] }
 
-    if params[:candidate].nil? || params[:candidate] == ''
-      return render_vote('候補者を記入してください')
-    elsif candidate.nil?
-      return render_vote('候補者を正しく記入してください' )
-    end
-    return render_vote('投票理由を記入してください' ) if params[:keyword].nil? || params[:keyword] == ''
+    return render_vote('候補者を正しく記入してください') if candidate.nil?
+    return render_vote('投票理由を記入してください') if params[:keyword].nil? || params[:keyword] == ''
 
     voted_count =
       user.nil? ? 0 : db.xquery('SELECT COUNT(*) AS count FROM votes WHERE user_id = ?', user[:id]).first[:count]
