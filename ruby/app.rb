@@ -157,7 +157,9 @@ class Ishocon2::WebApp < Sinatra::Base
   end
 
   get '/candidates/:id' do
-    rendered_index = redis.get(VIEW_CANDIDATE_KEY )
+    view_key = "view:candidate:#{params[:id]}"
+
+    rendered_index = redis.get(view_key)
     return rendered_index if rendered_index
 
     candidate = stored_candidate(params[:id])
@@ -171,15 +173,17 @@ class Ishocon2::WebApp < Sinatra::Base
       keywords: keywords }
 
     if 200 < redis.get('votes').to_i
-      redis.set(VIEW_CANDIDATE_KEY , rendered_view)
-      redis.expired(VIEW_CANDIDATE_KEY , 30)
+      redis.set(view_key, rendered_view)
+      redis.expired(view_key, 30)
     end
 
     rendered_view
   end
 
   get '/political_parties/:name' do
-    rendered_index = redis.get(VIEW_POLITICAL_PARTY_KEY)
+    view_key = "view:politial_partyies:#{params[:id]}"
+
+    rendered_index = redis.get(view_key)
     return rendered_index if rendered_index
 
     votes = get_party_vote(params[:name])
@@ -193,8 +197,8 @@ class Ishocon2::WebApp < Sinatra::Base
       keywords: keywords }
 
     if 200 < redis.get('votes').to_i
-      redis.set(VIEW_POLITICAL_PARTY_KEY, rendered_view)
-      redis.expired(VIEW_POLITICAL_PARTY_KEY, 30)
+      redis.set(view_key, rendered_view)
+      redis.expired(view_key, 30)
     end
 
     rendered_view
